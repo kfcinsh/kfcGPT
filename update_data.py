@@ -1,55 +1,88 @@
 import pandas as pd
 import requests
-import datetime
-from pathlib import Path
-from io import BytesIO
 import zipfile
+from io import BytesIO
+from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 # 取得今天日期（台灣時間）
-now = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
-today = now.strftime("%Y-%m-%d %H:%M:%S")
+tz = timezone(timedelta(hours=8))
+today = datetime.now(tz)
+date_str = today.strftime("%Y/%m/%d")
 
-# 實價登錄每日更新檔案（A 表：不動產買賣）
+# 內政部實價登錄不動產成交資料（全台）
+# 官方下載入口（A 案：不動產買賣）
 url = "https://plvr.land.moi.gov.tw//Download?fileName=lvr_landcsv.zip"
 
-# 下載 ZIP
+print("下載實價登錄 ZIP 檔中…")
 response = requests.get(url)
+response.raise_for_status()
+
 zip_file = zipfile.ZipFile(BytesIO(response.content))
 
-# A 表（不動產買賣資料）
+# 台灣全國「建物買賣」資料檔名（A_lvr_land_A.csv）
 csv_name = "A_lvr_land_A.csv"
-df = pd.read_csv(zip_file.open(csv_name), encoding="utf-8")
 
-# 篩選台中市 + 住家用
-df = df[df["鄉鎮市區"].str.contains("台中", na=False)]
-residential_keywords = ["住宅", "住家", "透天", "公寓", "華廈", "大樓"]
-df = df[df["主要用途"].isin(residential_keywords)]
+print("讀取 CSV 檔中…")
+# 官方檔案編碼是 cp950（Big5），要特別設定
+df = pd.read_csv(zip_file.open(csv_name), encoding="cp950")
 
-# 計算每坪單價
-df["每坪單價"] = df["單價每平方公尺"].astype(float) / 3.3058
+# 只取「台中市」＋「住家用」的資料
+df = df[df["縣市"] == "臺中市"]
+df = df[df["主要用途"] == "住家用"]
 
-# 全市狀況
-total_count = len(df)
-avg_price_city = df["每坪單價"].mean()
+# 只算「建物型態」看起來是一般住宅的案件（可依喜好調整）
+residential_keywords = ["住宅大樓", "華廈", "透天厝", "透天住宅"]
+df = df[df["建物型態"].astype(str).str.contains("|".join(residential_keywords))]
 
-# 各區
-district_stats = df.groupby("鄉鎮市區")["每坪單價"].mean().sort_values()
+# 單價元/平方公尺 → 萬/坪
+# 1 坪 = 3.305785 平方公尺
+PING_PER_M2 = 1 / 3.305785
+df["單價_萬每坪"] = df["單價元平方公尺"] * PING_PER_M2 / 10000
 
-# 建立 data 資料夾
+# 要統計的行政區
+target_areas = ["北屯區", "西屯區", "南屯區", "烏日區"]
+
+avg_price = {}
+
+for area in target_areas:
+    sub = df[df["鄉鎮市區"] == area]
+    # 避免有 0 或缺值干擾平均
+    clean = sub["單價_萬每坪"].replace(0, pd.NA).dropna()
+    if len(clean) == 0:
+        avg = None
+    else:
+        avg = round(clean.mean(), 1)
+    avg_price[area] = avg
+
+# 準備輸出文字
+lines = []
+lines.append(f"{date_str} 台中房價每日更新：")
+lines.append("")
+
+def fmt(area_name):
+    value = avg_price[area_name]
+    if value is None:
+        return f"- {area_name}：今日無足夠成交資料"
+    else:
+        return f"- {area_name}：單價 {value} 萬／坪"
+
+lines.append(fmt("北屯區"))
+lines.append(fmt("西屯區"))
+lines.append(fmt("南屯區"))
+lines.append(fmt("烏日區"))
+lines.append("")
+lines.append("（以上資料來自內政部實價登錄，由 kfcGPT 自動計算產生）")
+
+# 確保 data 資料夾存在
 data_dir = Path("data")
 data_dir.mkdir(exist_ok=True)
 
-# 儲存結果
-output = f"台中市不動產每日更新（{today}）\n"
-output += f"【全市成交量】：{total_count} 件\n"
-output += f"【全市平均每坪】：{avg_price_city:.2f} 萬元/坪\n\n"
-output += "【各行政區平均每坪】\n"
+out_path = data_dir / "taichung_daily.txt"
 
-for district, price in district_stats.items():
-    output += f"- {district}：{price:.2f} 萬/坪\n"
+print(f"寫入 {out_path} …")
+with out_path.open("w", encoding="utf-8") as f:
+    f.write("\n".join(lines))
 
-file_path = data_dir / "taichung_daily.txt"
-file_path.write_text(output, encoding="utf-8")
+print("完成：台中房價每日更新已產生。")
 
-print("已產生台中每日房價資料：")
-print(output)
