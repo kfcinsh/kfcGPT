@@ -50,3 +50,4 @@ elif mode == "📘 政策解說（台灣）":
                 messages=[{"role": "user", "content": f"請用台灣民眾聽得懂方式解釋政策：{q}"}]
             )
             st.write(reply.choices[0].message.content)
+
