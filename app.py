@@ -7,6 +7,7 @@ from openai import OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 st.set_page_config(page_title="kfcGPT - Taiwan Assistant", layout="wide")
 
+
 st.title("tw kfcGPT - Taiwan Real Estate • Law • Policy AI Assistant")
 st.write("每天自動更新台中房價資料 + 台灣法律 + 政策 AI 解說")
 
