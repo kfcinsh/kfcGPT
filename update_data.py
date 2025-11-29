@@ -21,7 +21,8 @@ response.raise_for_status()
 zip_file = zipfile.ZipFile(BytesIO(response.content))
 
 # ZIP 內的真正檔名
-csv_name = "A_lvr_land_A.CSV"
+csv_name = "A_lvr_land_A.csv"
+
 
 df = pd.read_csv(zip_file.open(csv_name), encoding="big5")
 
