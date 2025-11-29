@@ -11,7 +11,8 @@ today = datetime.now(tz)
 date_str = today.strftime("%Y/%m/%d")
 
 # 正確政府資料 ZIP 檔網址
-url = "https://plvr.land.moi.gov.tw/Download?type=zip&fileName=lvr_land_A.zip"
+url = "https://plvr.land.moi.gov.tw/Download?fileName=lvr_land.csv.zip"
+
 
 print("下載不動產成交 ZIP 檔中...")
 response = requests.get(url)
